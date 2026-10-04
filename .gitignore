@@ -27,3 +27,9 @@ Thumbs.db
 # Config directory with real allowed emails (copy of example with real emails)
 /config/
 allowed-emails.txt
+
+# Fork additions: never commit secrets under any env-file name
+.env.*
+!.env.example
+!.env.http.example
+.anylist_credentials

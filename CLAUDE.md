@@ -1,4 +1,40 @@
-# CLAUDE.md
+# CLAUDE.md — anylist-mcp
+
+## What this is
+A fork of bobby060/anylist-mcp, deployed on my personal Proxmox and exposed via Cloudflare Tunnel so ChatGPT can read/write my AnyList recipes, meal plan, and lists. **Read SPEC.md before starting any work.** It has the requirements, phases, and acceptance tests.
+
+## About me
+- I'm not a programmer. Explain what you're doing and why in plain terms, especially for anything touching auth, networking, or secrets.
+- I want copy-paste-ready commands for anything I run myself on the server.
+- My workstation is Windows. The Makefile targets and Docker run on the Linux LXC, not on Windows.
+
+## How to work
+- Work one phase at a time, in the order in SPEC.md. Don't start the next phase until the current one's "Done when" is met.
+- Propose a plan before making multi-file changes.
+- Use a branch for anything beyond a small fix.
+- When a requirement fails testing, add it to the Gap list in SPEC.md rather than silently working around it.
+- Keep SPEC.md current: update status, gap list, and open questions as things change.
+
+## Git
+- `origin` = `git@github-xathrus:xathrus/anylist-mcp.git` (my fork). Never change the host alias.
+- `upstream` = `https://github.com/bobby060/anylist-mcp.git` (pull only, never push).
+- Release order: `git add -A` → `git commit` → `git push origin main` → `git tag vX.Y.Z` → `git push origin vX.Y.Z`. Never tag before committing.
+
+## Secrets (hard rules)
+- Never commit `.env`, `config/allowed-emails.txt`, credentials, tokens, or the data volume. Confirm `.gitignore` covers them before the first commit.
+- Never print secret values in output or logs.
+- Ask before any change that affects authentication or what's publicly exposed.
+
+## Deployment
+- Runs in Docker on a personal Proxmox LXC.
+- Exposed through my existing Cloudflare Tunnel as a new public hostname (no port forwarding).
+- Updates via `update.sh` on the server: git pull, rebuild, restart.
+
+---
+
+# Upstream coding guidelines
+
+_From bobby060/anylist-mcp. Kept so fixes stay in the style upstream expects._
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
