@@ -1,7 +1,7 @@
 # AnyList MCP — Project Spec
 
 **Owner:** Eric (personal project, GitHub: xathrus)
-**Status:** Phase 1 done (2026-10-04). Next: Phase 2. Phase 0 done (2026-10-04, commit 142c7b8). On CT 116: Docker 29.8 and Node 22.23 installed, unit tests 80/80 pass, integration tests 57/57 pass against my main account (login, lists, recipes, meal plan, collections). MCP Inspector (2026-10-04): R1 search ("chicken", 147 hits) + full recipe ✅; R2 two-week range ✅; R3 add entry linked to a recipe with Dinner label ✅ (edit is missing, see gaps); R4 import from Allrecipes, 11 ingredients and 9 steps ✅; R5 all 25 lists + a non-grocery list ✅. Recipe times display wrong (gap). Note: the grocery list is named "My Grocery List", not "Groceries".
+**Status:** Phase 2 done (2026-10-04). Next: dependency triage (gap list), then Phase 3. Phase 0 done (2026-10-04, commit 142c7b8). On CT 116: Docker 29.8 and Node 22.23 installed, unit tests 80/80 pass, integration tests 57/57 pass against my main account (login, lists, recipes, meal plan, collections). MCP Inspector (2026-10-04): R1 search ("chicken", 147 hits) + full recipe ✅; R2 two-week range ✅; R3 add entry linked to a recipe with Dinner label ✅ (edit is missing, see gaps); R4 import from Allrecipes, 11 ingredients and 9 steps ✅; R5 all 25 lists + a non-grocery list ✅. Recipe times display wrong (gap). Note: the grocery list is named "My Grocery List", not "Groceries".
 **Last updated:** 2026-10-04
 
 ## Goal
@@ -106,6 +106,8 @@ Each phase must work before starting the next.
 - Create `update.sh` (git pull → rebuild → restart) and document it.
 - **Done when:** server survives a container restart and an LXC reboot.
 
+- **Result: ✅ Done (2026-10-04).** Running via Docker Compose with `restart: unless-stopped`. First `./update.sh` built and reported healthy (the first build takes about 11 min, mostly `apk add`; it's cached after that). `docker compose restart` came back healthy. After an LXC `reboot`, `/health` answered from the LAN without any manual steps. Server account created for xathrus@gmail.com and AnyList login saved via `/setup`. `allowed-emails.txt` is read only at startup, so restart after editing it.
+
 #### Server runbook (CT 116, `/opt/anylist-mcp`)
 
 | Task | Command |
@@ -155,7 +157,7 @@ _Filled in during Phase 1 and Phase 3._
 
 | Gap | Found in | Status |
 |---|---|---|
-| `npm install` reports 33 known vulnerabilities (1 critical, 21 high). Likely from dev-only release tools, which the Docker image skips; confirm with `npm audit --omit=dev` before Phase 3 goes public. Do not use `npm audit fix --force`. | Phase 1 setup | Open: investigate |
+| **Dependency vulnerabilities.** Full install: 33 (1 critical, 21 high). Production only (`npm audit --omit=dev`, 2026-10-04): **21 (1 critical, 10 high, 5 moderate, 5 low)**, so not just dev tools. Seen so far: `@anthropic-ai/mcpb` (desktop-extension packager, wrongly listed under `dependencies`, unused at runtime) pulls in vulnerable `@inquirer/prompts`; `ws` 7.x (DoS), `uuid` <11, `tough-cookie` <4.1.3 come via the AnyList library and are only used against AnyList's servers. Critical item not yet identified. Do not use `npm audit fix --force`. | Phase 1 setup, Phase 2 | Open: **triage before Phase 3** (run `npm audit --omit=dev` and read the full list; move `mcpb` to devDependencies) |
 | **R3 edit:** `meal_plan` has no edit/move action, only `list_events`, `list_labels`, `create_event` and `delete_event`. "Move Thursday's dinner to Friday" only works if the AI deletes and re-creates the entry, which loses the original entry ID and needs two steps that could half-fail. | Phase 1 code review | Open: Phase 4 candidate (add `update_event`) |
 | **R1/R4 recipe times:** AnyList stores prep/cook time in **seconds** (per `anylist-js/README.md`), but `src/tools/recipes.js` shows them as minutes and writes `prep_time`/`cook_time` "in minutes" unconverted. Seen in Inspector: "Baked Lemon Chicken, cook: 1500min" (really 25 min). A recipe created with prep_time 15 would save as 15 seconds. | Phase 1 Inspector | Open: Phase 4 (convert seconds↔minutes on read and write, with tests) |
 | **Recipe delete with duplicate names:** `deleteRecipe` in `src/anylist-client.js` deletes the first exact-name match without checking for others, while `update` refuses when a name matches several recipes. With 1,300+ recipes, a duplicate name could make ChatGPT delete the wrong copy. | Phase 1 code review | Open: Phase 4 (refuse on multiple matches, or delete by ID) |
