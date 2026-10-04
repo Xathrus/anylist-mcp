@@ -1,7 +1,7 @@
 # AnyList MCP — Project Spec
 
 **Owner:** Eric (personal project, GitHub: xathrus)
-**Status:** Planning
+**Status:** Phase 1 done (2026-10-04). Next: Phase 2. Phase 0 done (2026-10-04, commit 142c7b8). On CT 116: Docker 29.8 and Node 22.23 installed, unit tests 80/80 pass, integration tests 57/57 pass against my main account (login, lists, recipes, meal plan, collections). MCP Inspector (2026-10-04): R1 search ("chicken", 147 hits) + full recipe ✅; R2 two-week range ✅; R3 add entry linked to a recipe with Dinner label ✅ (edit is missing, see gaps); R4 import from Allrecipes, 11 ingredients and 9 steps ✅; R5 all 25 lists + a non-grocery list ✅. Recipe times display wrong (gap). Note: the grocery list is named "My Grocery List", not "Groceries".
 **Last updated:** 2026-10-04
 
 ## Goal
@@ -87,6 +87,11 @@ Each phase must work before starting the next.
 - Add `upstream` remote pointing to `bobby060/anylist-mcp`.
 - Add this `SPEC.md` and `CLAUDE.md`; commit and push.
 - **Done when:** repo is cloned, both remotes exist, first commit is pushed as xathrus.
+- **Result: ✅ Done.** Notes:
+  - Repo was initialized in the existing folder rather than freshly cloned, so SPEC.md and CLAUDE.md stayed put. The result is the same as a clone, including the `anylist-js` submodule.
+  - Upstream already had its own CLAUDE.md, so it was merged under ours as "Upstream coding guidelines". If upstream edits it, pulling from upstream may need a manual merge.
+  - `upstream` push URL is set to `no_push`, so git refuses any push to bobby060.
+  - Added `.gitignore` entries for `.env.*` (except the examples) and `.anylist_credentials`.
 
 ### Phase 1 — Prove it works against my AnyList
 - Install and run on the LXC (Linux; the Makefile targets don't run natively on Windows).
@@ -94,6 +99,7 @@ Each phase must work before starting the next.
 - Use the MCP Inspector to exercise every requirement R1–R5 manually.
 - **Done when:** R1–R5 all pass in the Inspector, or failures are recorded on the gap list.
 - **Stop point:** if the AnyList library can't log in or read data, stop and reassess before going further.
+- **Result: ✅ Done.** R1, R2, R4 and R5 pass; R3 add/remove passes, edit is missing. Failures and risks are on the gap list. Test data (imported Allrecipes cookie recipe, Oct 10 test meal plan entry) was deleted afterwards. Inspector access: `ssh -L 6274:localhost:6274 -L 6277:localhost:6277 root@<LXC IP>`, then `make inspect` in that session.
 
 ### Phase 2 — Deploy on Proxmox (LAN only)
 - Run in HTTP mode via Docker on the LXC; container restarts automatically.
@@ -132,7 +138,10 @@ _Filled in during Phase 1 and Phase 3._
 
 | Gap | Found in | Status |
 |---|---|---|
-| | | |
+| `npm install` reports 33 known vulnerabilities (1 critical, 21 high). Likely from dev-only release tools, which the Docker image skips; confirm with `npm audit --omit=dev` before Phase 3 goes public. Do not use `npm audit fix --force`. | Phase 1 setup | Open: investigate |
+| **R3 edit:** `meal_plan` has no edit/move action, only `list_events`, `list_labels`, `create_event` and `delete_event`. "Move Thursday's dinner to Friday" only works if the AI deletes and re-creates the entry, which loses the original entry ID and needs two steps that could half-fail. | Phase 1 code review | Open: Phase 4 candidate (add `update_event`) |
+| **R1/R4 recipe times:** AnyList stores prep/cook time in **seconds** (per `anylist-js/README.md`), but `src/tools/recipes.js` shows them as minutes and writes `prep_time`/`cook_time` "in minutes" unconverted. Seen in Inspector: "Baked Lemon Chicken, cook: 1500min" (really 25 min). A recipe created with prep_time 15 would save as 15 seconds. | Phase 1 Inspector | Open: Phase 4 (convert seconds↔minutes on read and write, with tests) |
+| **Recipe delete with duplicate names:** `deleteRecipe` in `src/anylist-client.js` deletes the first exact-name match without checking for others, while `update` refuses when a name matches several recipes. With 1,300+ recipes, a duplicate name could make ChatGPT delete the wrong copy. | Phase 1 code review | Open: Phase 4 (refuse on multiple matches, or delete by ID) |
 
 ## Fallback: build our own
 
@@ -144,6 +153,10 @@ Only if the fork is unworkable. Same requirements, phases 1–3 unchanged.
 ## Open questions
 
 - Public hostname to use for the tunnel.
-- Which LXC hosts it (new or existing Docker host).
-- Use my main AnyList account or a secondary shared account?
+
+Resolved:
+
+- ~~Which LXC hosts it?~~ **New dedicated LXC** (decided 2026-10-04): unprivileged Debian, 2 cores, 2 GB RAM, 512 MB swap, 16 GB disk, features `nesting=1,keyctl=1` (required for Docker), start at boot, fixed IP. Built as CT 116, Debian 13, 192.168.12.86. Code lives at `/opt/anylist-mcp`, cloned read-only over HTTPS, so the server has no GitHub credentials.
+
+- ~~Use my main AnyList account or a secondary shared account?~~ **Main account** (decided 2026-10-04). Accepted risk: the server holds my main AnyList password, encrypted at rest with `SERVER_SECRET_KEY`. Integration tests write to this account, but only items prefixed 🧪, a list named `Test List`, and meal plan entries dated 2099. They clean up after themselves; if a run crashes, delete any 🧪 leftovers by hand.
 - Confirm my ChatGPT plan supports Developer Mode.
