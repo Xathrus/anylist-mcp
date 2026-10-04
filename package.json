@@ -24,7 +24,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/mcpb": "^2.1.2",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "anylist": "^0.8.5",
     "bcrypt": "^6.0.0",
@@ -35,6 +34,7 @@
     "google-auth-library": "^10.6.2"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^11.0.1",
