@@ -106,6 +106,23 @@ Each phase must work before starting the next.
 - Create `update.sh` (git pull → rebuild → restart) and document it.
 - **Done when:** server survives a container restart and an LXC reboot.
 
+#### Server runbook (CT 116, `/opt/anylist-mcp`)
+
+| Task | Command |
+|---|---|
+| Update to latest `main` | `cd /opt/anylist-mcp && ./update.sh` |
+| Status | `cd /opt/anylist-mcp && docker compose ps` |
+| Logs (live; Ctrl+C to stop) | `cd /opt/anylist-mcp && docker compose logs -f` |
+| Restart | `cd /opt/anylist-mcp && docker compose restart` |
+| Stop / start | `docker compose down` / `docker compose up -d` (in `/opt/anylist-mcp`) |
+| Health | `curl -s http://localhost:3000/health` should print `{"status":"ok"}` |
+
+Sign-in model: create a server account at `http://192.168.12.86:3000/login` (email must be in `config/allowed-emails.txt`), then enter AnyList credentials at `/setup`. They're stored encrypted with `SERVER_SECRET_KEY`.
+
+**Back up:**
+- `SERVER_SECRET_KEY` and `SESSION_SECRET` from `.env`, in a password manager. Without `SERVER_SECRET_KEY`, the saved AnyList login can't be decrypted, and you'd have to re-enter it at `/setup`.
+- The `anylist_data` Docker volume (the SQLite database with accounts and OAuth clients). Losing it means signing up again and reconnecting ChatGPT, but no AnyList data is lost.
+
 ### Phase 3 — Expose and connect ChatGPT
 - Add a public hostname to the existing Cloudflare Tunnel pointing at the container.
 - Configure secrets and the email allowlist (my email only).
