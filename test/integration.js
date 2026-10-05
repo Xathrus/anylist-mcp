@@ -619,13 +619,18 @@ try {
 
   // Invalid action test — SDK validates enum at protocol level, so expect a thrown error
   await test('shopping → invalid action returns error', async () => {
+    // Older SDKs throw a protocol error for schema violations; SDK >= 1.2x
+    // returns them as a tool result with isError so the model can self-correct.
+    let r;
     try {
-      await client.callTool({ name: 'shopping', arguments: { action: 'nonexistent' } });
-      throw new Error('Expected error for invalid action');
+      r = await client.callTool({ name: 'shopping', arguments: { action: 'nonexistent' } });
     } catch (e) {
-      if (e.message.includes('Expected error')) throw e;
       return 'Correctly rejected invalid action at protocol level';
     }
+    if (!r.isError || !/validation/i.test(r.content?.[0]?.text || '')) {
+      throw new Error('Expected error for invalid action');
+    }
+    return 'Correctly rejected invalid action as a tool error';
   });
 
   console.log(`\n${'='.repeat(50)}`);
