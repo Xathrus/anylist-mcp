@@ -147,7 +147,7 @@ Manage the AnyList meal planning calendar.
 | `details` | string | No | Additional notes |
 | `event_id` | string | For update, delete | Event ID (from `list_events`) |
 
-On `update_event`, only the fields you pass change. Pass an empty string to clear `title`, `recipe_id`, `label_id` or `details`. Edits to those fields happen in place and keep the event ID. AnyList doesn't accept date changes on an existing event, so changing `date` creates a copy on the new date and then removes the original. The reply gives the new ID.
+On `update_event`, only the fields you pass change. Pass an empty string to clear `title`, `recipe_id`, `label_id` or `details`. AnyList doesn't apply in-place edits to existing events, so every update creates an updated copy and then removes the original. The event gets a new ID, which the reply gives.
 
 **Actions:**
 
@@ -166,7 +166,7 @@ On `update_event`, only the fields you pass change. Pass an empty string to clea
     "label_id": "<id from list_labels>"
 } }
 
-// Move an event to another day (returns a new ID), or change its recipe/label/notes in place
+// Move an event to another day, or change its recipe/label/notes (returns a new ID)
 { "name": "meal_plan", "arguments": { "action": "update_event", "event_id": "<id>", "date": "2025-02-16" } }
 
 // Delete an event

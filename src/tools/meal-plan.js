@@ -11,7 +11,7 @@ export function register(server, getClient) {
 - list_events: Show all meal plan events (sorted by date)
 - list_labels: Show available labels (Breakfast, Lunch, Dinner, etc.) with IDs
 - create_event: Add a meal plan event for a date
-- update_event: Change an existing event by ID: move it to another date, or change its title, recipe, label or notes. Use this (not delete + create) to move or edit a meal. Moving to a new date gives the event a new ID (returned in the reply).
+- update_event: Change an existing event by ID: move it to another date, or change its title, recipe, label or notes. Use this (not delete + create) to move or edit a meal. The event gets a new ID on every update (returned in the reply).
 - delete_event: Delete a meal plan event by ID`,
     inputSchema: {
       action: z.enum(["list_events", "list_labels", "create_event", "update_event", "delete_event"]).describe("The meal plan action to perform"),
@@ -78,10 +78,7 @@ export function register(server, getClient) {
             return errorResponse('Action "update_event" requires at least one field to change (date, title, recipe_id, label_id, or details).');
           }
           const result = await client.updateMealPlanEvent(eventId, changes);
-          if (result.previousIdentifier) {
-            return textResponse(`Updated meal plan event: moved to ${result.date}. New id: ${result.identifier} (the old id ${result.previousIdentifier} no longer exists).`);
-          }
-          return textResponse(`Updated meal plan event ${result.identifier} (date: ${result.date})`);
+          return textResponse(`Updated meal plan event (date: ${result.date}). New id: ${result.identifier} (the old id ${result.previousIdentifier} no longer exists).`);
         }
         case "delete_event": {
           let eventId = event_id;

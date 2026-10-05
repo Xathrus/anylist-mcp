@@ -575,18 +575,24 @@ try {
     return `end_date=${testEventDate} correctly filtered`;
   });
 
-  // update_event (field edit): rename the second event in place; ID must not change
+  // update_event (field edit): rename the second event; it comes back with a new ID
   const renamedTitle = '🧪 Integration Test Meal 2 (renamed)';
-  await test('meal_plan → update_event renames an event in place (same ID)', async () => {
+  await test('meal_plan → update_event renames an event (same date, new ID)', async () => {
     const r = await client.callTool({ name: 'meal_plan', arguments: {
       action: 'update_event', event_id: testEventId2, title: renamedTitle,
     }});
-    if (r.isError || !r.content[0].text.includes('Updated')) throw new Error(r.content[0].text);
+    const text = r.content[0].text;
+    const newId = text.match(/New id: (\S+?) /)?.[1];
+    if (r.isError || !newId) throw new Error(text);
+    const oldId = testEventId2;
+    testEventId2 = newId; // so the delete step below removes the renamed event
     await new Promise(res => setTimeout(res, 1000));
     const list = await client.callTool({ name: 'meal_plan', arguments: { action: 'list_events', start_date: '2099-06-01', end_date: '2099-06-30' } });
-    const line = list.content[0].text.split('\n').find(l => l.includes(`(id: ${testEventId2})`));
-    if (!line) throw new Error(`event ${testEventId2} missing after rename`);
-    if (!line.includes(renamedTitle)) throw new Error(`title not changed: ${line}`);
+    const listText = list.content[0].text;
+    const line = listText.split('\n').find(l => l.includes(`(id: ${newId})`));
+    if (!line) throw new Error(`renamed event ${newId} missing:\n${listText}`);
+    if (!line.includes(renamedTitle) || !line.includes(testEventDate2)) throw new Error(`title/date wrong: ${line}`);
+    if (listText.includes(`(id: ${oldId})`)) throw new Error(`original event ${oldId} not removed`);
     return line.trim();
   });
 
@@ -597,9 +603,8 @@ try {
       action: 'update_event', event_id: testEventId, date: movedEventDate,
     }});
     const text = r.content[0].text;
-    if (r.isError || !text.includes('moved to')) throw new Error(text);
     const newId = text.match(/New id: (\S+?) /)?.[1];
-    if (!newId) throw new Error(`no new id in reply: ${text}`);
+    if (r.isError || !newId || !text.includes(movedEventDate)) throw new Error(`unexpected reply: ${text}`);
     testEventId = newId; // so the delete step below removes the moved event
     return text;
   });
