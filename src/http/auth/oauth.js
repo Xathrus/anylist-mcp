@@ -15,6 +15,7 @@ import {
 } from "../db.js";
 import { loginWithPassword, registerWithPassword } from "./providers/password.js";
 import { loginWithGoogle, isGoogleEnabled } from "./providers/google.js";
+import { buildRegistrationResponse } from "./registration.js";
 
 function renderLogin(res, error = "") {
   res.render("login", {
@@ -72,15 +73,7 @@ router.post(["/oauth/register", "/register"], (req, res) => {
   const clientId = randomUUID();
   const redirectUri = Array.isArray(redirect_uris) ? redirect_uris[0] : redirect_uris || null;
   registerOAuthClient({ clientId, redirectUri });
-  res.status(201).json({
-    client_id: clientId,
-    client_secret: null,
-    redirect_uris: redirectUri ? [redirectUri] : [],
-    client_name: client_name || "MCP Client",
-    token_endpoint_auth_method: "none",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-  });
+  res.status(201).json(buildRegistrationResponse({ clientId, redirectUri, clientName: client_name }));
 });
 
 // ── Authorization Endpoint ────────────────────────────────────────────────────
