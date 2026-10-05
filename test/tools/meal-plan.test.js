@@ -109,20 +109,25 @@ describe('meal_plan tool', () => {
       client._events.push({ identifier: 'e-thu', date: '2026-10-08', recipeId: 'r-1', labelId: 'l-dinner', title: null, details: 'note' });
     });
 
-    it('moves an event to another date and keeps its id and other fields', async () => {
+    it('moves an event to another date, keeps its other fields, and reports the new id', async () => {
       const result = await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu', date: '2026-10-09' });
-      assert.ok(result.content[0].text.includes('e-thu'));
+      const text = result.content[0].text;
+      assert.ok(text.includes('moved to 2026-10-09'), text);
+      assert.ok(text.includes('New id: e-thu-moved'), text);
+      assert.ok(text.includes('old id e-thu'), text);
       const e = client._events[0];
       assert.equal(e.date, '2026-10-09');
       assert.equal(e.recipeId, 'r-1');
       assert.equal(e.labelId, 'l-dinner');
       assert.equal(e.details, 'note');
-      assert.equal(client._events.length, 1, 'no new event created');
+      assert.equal(client._events.length, 1, 'exactly one event after the move');
     });
 
-    it('changes only the fields passed and clears with an empty string', async () => {
-      await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu', label_id: 'l-lunch', details: '' });
+    it('edits fields in place, keeping the id, and clears with an empty string', async () => {
+      const result = await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu', label_id: 'l-lunch', details: '' });
+      assert.ok(result.content[0].text.includes('e-thu'));
       const e = client._events[0];
+      assert.equal(e.identifier, 'e-thu');
       assert.equal(e.labelId, 'l-lunch');
       assert.equal(e.details, null);
       assert.equal(e.date, '2026-10-08');

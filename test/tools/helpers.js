@@ -174,11 +174,18 @@ export class MockAnyListClient {
     return { identifier: 'e-1', date: opts.date };
   }
 
+  // Mirrors the real client: field edits keep the id; a date change
+  // replaces the event with a copy that has a new id.
   async updateMealPlanEvent(id, changes = {}) {
     const e = this._events.find(x => x.identifier === id);
     if (!e) throw new Error(`Meal plan event "${id}" not found`);
     for (const [key, value] of Object.entries(changes)) {
-      if (value !== undefined) e[key] = value === '' ? null : value;
+      if (key !== 'date' && value !== undefined) e[key] = value === '' ? null : value;
+    }
+    if (changes.date !== undefined && changes.date !== e.date) {
+      e.date = changes.date;
+      e.identifier = `${id}-moved`;
+      return { identifier: e.identifier, date: e.date, previousIdentifier: id };
     }
     return { identifier: e.identifier, date: e.date };
   }

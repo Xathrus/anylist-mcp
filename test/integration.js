@@ -575,23 +575,44 @@ try {
     return `end_date=${testEventDate} correctly filtered`;
   });
 
-  // update_event: move the first event to a new date in place (same ID)
+  // update_event (field edit): rename the second event in place; ID must not change
+  const renamedTitle = '🧪 Integration Test Meal 2 (renamed)';
+  await test('meal_plan → update_event renames an event in place (same ID)', async () => {
+    const r = await client.callTool({ name: 'meal_plan', arguments: {
+      action: 'update_event', event_id: testEventId2, title: renamedTitle,
+    }});
+    if (r.isError || !r.content[0].text.includes('Updated')) throw new Error(r.content[0].text);
+    await new Promise(res => setTimeout(res, 1000));
+    const list = await client.callTool({ name: 'meal_plan', arguments: { action: 'list_events', start_date: '2099-06-01', end_date: '2099-06-30' } });
+    const line = list.content[0].text.split('\n').find(l => l.includes(`(id: ${testEventId2})`));
+    if (!line) throw new Error(`event ${testEventId2} missing after rename`);
+    if (!line.includes(renamedTitle)) throw new Error(`title not changed: ${line}`);
+    return line.trim();
+  });
+
+  // update_event (date change): moves the first event; it comes back with a new ID
   const movedEventDate = '2099-06-17';
   await test(`meal_plan → update_event moves ${testEventDate} → ${movedEventDate}`, async () => {
     const r = await client.callTool({ name: 'meal_plan', arguments: {
       action: 'update_event', event_id: testEventId, date: movedEventDate,
     }});
-    if (r.isError || !r.content[0].text.includes('Updated')) throw new Error(r.content[0].text);
-    return r.content[0].text;
+    const text = r.content[0].text;
+    if (r.isError || !text.includes('moved to')) throw new Error(text);
+    const newId = text.match(/New id: (\S+?) /)?.[1];
+    if (!newId) throw new Error(`no new id in reply: ${text}`);
+    testEventId = newId; // so the delete step below removes the moved event
+    return text;
   });
 
-  await test('meal_plan → moved event keeps its ID and title on the new date', async () => {
+  await test('meal_plan → moved event is on the new date with its title, old date empty', async () => {
+    await new Promise(res => setTimeout(res, 1000));
     const r = await client.callTool({ name: 'meal_plan', arguments: { action: 'list_events', start_date: '2099-06-01', end_date: '2099-06-30' } });
-    const line = r.content[0].text.split('\n').find(l => l.includes(`(id: ${testEventId})`));
-    if (!line) throw new Error(`event ${testEventId} missing after update:\n${r.content[0].text}`);
+    const text = r.content[0].text;
+    const line = text.split('\n').find(l => l.includes(`(id: ${testEventId})`));
+    if (!line) throw new Error(`moved event ${testEventId} missing:\n${text}`);
     if (!line.includes(movedEventDate)) throw new Error(`event not on ${movedEventDate}: ${line}`);
     if (!line.includes('🧪 Integration Test Meal')) throw new Error(`title lost: ${line}`);
-    if (r.content[0].text.includes(testEventDate)) throw new Error(`${testEventDate} still has an event (delete+create instead of move?)`);
+    if (text.includes(testEventDate)) throw new Error(`${testEventDate} still has an event (original not removed)`);
     return line.trim();
   });
 

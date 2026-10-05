@@ -705,9 +705,15 @@ class AnyListClient {
   }
 
   /**
-   * Update an existing meal plan event in place (keeps its identifier).
-   * Only keys present in `changes` are applied; an empty string clears
-   * title, recipeId, labelId or details.
+   * Update an existing meal plan event. Only keys present in `changes` are
+   * applied; an empty string clears title, recipeId, labelId or details.
+   *
+   * Title/recipe/label/details are edited in place ('set-event-details',
+   * same identifier). AnyList ignores date changes sent that way (verified
+   * by integration test), so a date change creates a copy on the new date
+   * and then deletes the original. The copy is created first so a failure
+   * leaves a duplicate rather than losing the meal. Returns the new
+   * identifier and `previousIdentifier` when the event was moved.
    */
   async updateMealPlanEvent(eventId, changes = {}) {
     if (!this.client) {
@@ -719,13 +725,31 @@ class AnyListClient {
       if (!event) {
         throw new Error(`Meal plan event "${eventId}" not found`);
       }
-      if (changes.date !== undefined) event.date = new Date(`${changes.date}T12:00:00`);
       for (const key of ['title', 'recipeId', 'labelId', 'details']) {
         if (changes[key] !== undefined) event[key] = changes[key] === '' ? null : changes[key];
       }
-      await event.save();
-      console.error(`Updated meal plan event: ${eventId}`);
-      return { identifier: event.identifier, date: event.date.toISOString().slice(0, 10) };
+      const currentDate = event.date instanceof Date ? event.date.toISOString().slice(0, 10) : String(event.date);
+      const moving = changes.date !== undefined && changes.date !== currentDate;
+
+      if (!moving) {
+        await event.save();
+        console.error(`Updated meal plan event: ${eventId}`);
+        return { identifier: event.identifier, date: currentDate };
+      }
+
+      const copy = { date: new Date(`${changes.date}T12:00:00`) };
+      for (const key of ['title', 'recipeId', 'labelId', 'details', 'recipeScaleFactor']) {
+        if (event[key] !== undefined && event[key] !== null) copy[key] = event[key];
+      }
+      const moved = await this.client.createEvent(copy);
+      await moved.save();
+      try {
+        await event.delete();
+      } catch (deleteError) {
+        throw new Error(`created the event on ${changes.date} (id ${moved.identifier}) but could not remove the original ${eventId}; delete it manually: ${deleteError.message}`);
+      }
+      console.error(`Moved meal plan event ${eventId} -> ${moved.identifier} (${changes.date})`);
+      return { identifier: moved.identifier, date: changes.date, previousIdentifier: eventId };
     } catch (error) {
       throw new Error(`Failed to update meal plan event: ${error.message}`);
     }
