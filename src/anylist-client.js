@@ -1,5 +1,6 @@
 import AnyList from '../anylist-js/lib/index.js';
 import { normalizeRecipe } from './recipe-normalizer.js';
+import { durationTextToSeconds } from './recipe-time.js';
 
 class AnyListClient {
   /**
@@ -499,8 +500,8 @@ class AnyListClient {
         note: normalized.note,
         sourceName: normalized.sourceName,
         sourceUrl: normalized.sourceUrl || url,
-        prepTime: normalized.prepTime,
-        cookTime: normalized.cookTime,
+        prepTime: durationTextToSeconds(normalized.prepTime),
+        cookTime: durationTextToSeconds(normalized.cookTime),
         servings: normalized.servings,
       });
       console.error(`Imported recipe from URL (normalizer fallback): ${created.name}`);
@@ -703,6 +704,33 @@ class AnyListClient {
     }
   }
 
+  /**
+   * Update an existing meal plan event in place (keeps its identifier).
+   * Only keys present in `changes` are applied; an empty string clears
+   * title, recipeId, labelId or details.
+   */
+  async updateMealPlanEvent(eventId, changes = {}) {
+    if (!this.client) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+    try {
+      const events = await this.client.getMealPlanningCalendarEvents();
+      const event = events.find(e => e.identifier === eventId);
+      if (!event) {
+        throw new Error(`Meal plan event "${eventId}" not found`);
+      }
+      if (changes.date !== undefined) event.date = new Date(`${changes.date}T12:00:00`);
+      for (const key of ['title', 'recipeId', 'labelId', 'details']) {
+        if (changes[key] !== undefined) event[key] = changes[key] === '' ? null : changes[key];
+      }
+      await event.save();
+      console.error(`Updated meal plan event: ${eventId}`);
+      return { identifier: event.identifier, date: event.date.toISOString().slice(0, 10) };
+    } catch (error) {
+      throw new Error(`Failed to update meal plan event: ${error.message}`);
+    }
+  }
+
   async deleteMealPlanEvent(eventId) {
     if (!this.client) {
       throw new Error('Not connected. Call connect() first.');
@@ -803,6 +831,81 @@ class AnyListClient {
       return { identifier: collection.identifier, name: collection.name };
     } catch (error) {
       throw new Error(`Failed to create recipe collection: ${error.message}`);
+    }
+  }
+
+  /**
+   * Resolve a collection and a list of recipe names for add/remove.
+   * Recipe names match exactly (case-insensitive); unmatched names are
+   * returned in `notFound` rather than failing the whole call.
+   */
+  async _resolveCollectionAndRecipes(name, recipeNames) {
+    const userData = await this.client._getUserData(true);
+    const collections = userData.recipeDataResponse.recipeCollections || [];
+    const raw = collections.find(c => c.name && c.name.toLowerCase() === name.toLowerCase());
+    if (!raw) throw new Error(`Recipe collection "${name}" not found`);
+    const recipes = await this.client.getRecipes();
+    const found = [];
+    const notFound = [];
+    for (const rName of recipeNames) {
+      const r = recipes.find(x => x.name && x.name.toLowerCase() === rName.toLowerCase());
+      if (r) found.push(r);
+      else notFound.push(rName);
+    }
+    return { raw, found, notFound, currentIds: [...(raw.recipeIds || [])] };
+  }
+
+  // Builds a RecipeCollection carrying only the given recipe ids. AnyList's
+  // add-/remove-recipes-to/from-collection operations act on the ids sent.
+  _collectionWithIds(raw, recipeIds) {
+    return this.client.createRecipeCollection({
+      identifier: raw.identifier,
+      timestamp: raw.timestamp,
+      name: raw.name,
+      recipeIds,
+      collectionSettings: raw.collectionSettings,
+    });
+  }
+
+  async addRecipesToCollection(name, recipeNames = []) {
+    if (!this.client) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+    try {
+      const { raw, found, notFound, currentIds } = await this._resolveCollectionAndRecipes(name, recipeNames);
+      const toAdd = found.filter(r => !currentIds.includes(r.identifier));
+      const alreadyPresent = found.filter(r => currentIds.includes(r.identifier)).map(r => r.name);
+      if (toAdd.length > 0) {
+        // Send existing + new ids: correct whether AnyList treats the list as
+        // a delta or as the full membership.
+        const collection = this._collectionWithIds(raw, [...currentIds, ...toAdd.map(r => r.identifier)]);
+        await collection.performOperation('add-recipes-to-collection');
+        console.error(`Added ${toAdd.length} recipe(s) to collection: ${raw.name}`);
+      }
+      return { name: raw.name, added: toAdd.map(r => r.name), alreadyPresent, notFound };
+    } catch (error) {
+      throw new Error(`Failed to add recipes to collection: ${error.message}`);
+    }
+  }
+
+  async removeRecipesFromCollection(name, recipeNames = []) {
+    if (!this.client) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+    try {
+      const { raw, found, notFound, currentIds } = await this._resolveCollectionAndRecipes(name, recipeNames);
+      const toRemove = found.filter(r => currentIds.includes(r.identifier));
+      const notInCollection = found.filter(r => !currentIds.includes(r.identifier)).map(r => r.name);
+      if (toRemove.length > 0) {
+        // Send only the ids being removed (see integration test that checks
+        // the remaining recipes survive).
+        const collection = this._collectionWithIds(raw, toRemove.map(r => r.identifier));
+        await collection.performOperation('remove-recipes-from-collection');
+        console.error(`Removed ${toRemove.length} recipe(s) from collection: ${raw.name}`);
+      }
+      return { name: raw.name, removed: toRemove.map(r => r.name), notInCollection, notFound };
+    } catch (error) {
+      throw new Error(`Failed to remove recipes from collection: ${error.message}`);
     }
   }
 

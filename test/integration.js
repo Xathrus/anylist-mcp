@@ -481,6 +481,29 @@ try {
     return text;
   });
 
+  // Recipe times: tools speak minutes, AnyList stores seconds. Round-trip
+  // through AnyList and confirm the minutes come back unchanged.
+  const timedRecipe = `🧪 Timed Recipe ${Date.now()}`;
+  await test(`recipes → create with prep_time 20 / cook_time 50 ("${timedRecipe}")`, async () => {
+    const r = await client.callTool({ name: 'recipes', arguments: {
+      action: 'create', name: timedRecipe, prep_time: 20, cook_time: 50,
+    }});
+    if (r.isError || !r.content[0].text.includes('Created')) throw new Error(r.content[0].text);
+    return r.content[0].text;
+  });
+  await new Promise(r => setTimeout(r, 2000));
+  await test('recipes → get shows the same minutes back (stored as seconds)', async () => {
+    const r = await client.callTool({ name: 'recipes', arguments: { action: 'get', name: timedRecipe } });
+    const text = r.content[0].text;
+    if (!text.includes('Prep: 20 min') || !text.includes('Cook: 50 min')) throw new Error(`expected 20/50 min, got:\n${text}`);
+    return 'Prep 20 min / Cook 50 min round-trip OK';
+  });
+  await test(`recipes → delete ("${timedRecipe}")`, async () => {
+    const r = await client.callTool({ name: 'recipes', arguments: { action: 'delete', name: timedRecipe } });
+    if (r.isError || !r.content[0].text.toLowerCase().includes('delet')) throw new Error(r.content[0].text);
+    return r.content[0].text;
+  });
+
   // Meal plan: list_labels
   await test('meal_plan → list_labels', async () => {
     const r = await client.callTool({ name: 'meal_plan', arguments: { action: 'list_labels' } });
@@ -552,6 +575,26 @@ try {
     return `end_date=${testEventDate} correctly filtered`;
   });
 
+  // update_event: move the first event to a new date in place (same ID)
+  const movedEventDate = '2099-06-17';
+  await test(`meal_plan → update_event moves ${testEventDate} → ${movedEventDate}`, async () => {
+    const r = await client.callTool({ name: 'meal_plan', arguments: {
+      action: 'update_event', event_id: testEventId, date: movedEventDate,
+    }});
+    if (r.isError || !r.content[0].text.includes('Updated')) throw new Error(r.content[0].text);
+    return r.content[0].text;
+  });
+
+  await test('meal_plan → moved event keeps its ID and title on the new date', async () => {
+    const r = await client.callTool({ name: 'meal_plan', arguments: { action: 'list_events', start_date: '2099-06-01', end_date: '2099-06-30' } });
+    const line = r.content[0].text.split('\n').find(l => l.includes(`(id: ${testEventId})`));
+    if (!line) throw new Error(`event ${testEventId} missing after update:\n${r.content[0].text}`);
+    if (!line.includes(movedEventDate)) throw new Error(`event not on ${movedEventDate}: ${line}`);
+    if (!line.includes('🧪 Integration Test Meal')) throw new Error(`title lost: ${line}`);
+    if (r.content[0].text.includes(testEventDate)) throw new Error(`${testEventDate} still has an event (delete+create instead of move?)`);
+    return line.trim();
+  });
+
   await test(`meal_plan → delete_event (${testEventDate})`, async () => {
     if (!testEventId) throw new Error('No event ID captured — cannot delete');
     const r = await client.callTool({ name: 'meal_plan', arguments: {
@@ -577,6 +620,7 @@ try {
     const text = r.content[0].text;
     if (text.includes(testEventDate)) throw new Error(`${testEventDate} still appears after deletion`);
     if (text.includes(testEventDate2)) throw new Error(`${testEventDate2} still appears after deletion`);
+    if (text.includes(movedEventDate)) throw new Error(`${movedEventDate} still appears after deletion`);
     return 'Events absent from list after deletion';
   });
 
@@ -602,6 +646,53 @@ try {
     if (!text.includes(testCollection)) throw new Error(`"${testCollection}" not found in collections list`);
     return `Collection "${testCollection}" confirmed`;
   });
+
+  // add_recipes / remove_recipes on the test collection, using two 🧪 recipes.
+  // Removing one must leave the other in place.
+  const collRecipeA = `🧪 Collection Recipe A ${Date.now()}`;
+  const collRecipeB = `🧪 Collection Recipe B ${Date.now()}`;
+  const collectionLine = async () => {
+    const r = await client.callTool({ name: 'recipe_collections', arguments: { action: 'list' } });
+    return r.content[0].text.split('\n').find(l => l.includes(testCollection)) || '';
+  };
+
+  for (const rn of [collRecipeA, collRecipeB]) {
+    await test(`recipes → create ("${rn}") for collection test`, async () => {
+      const r = await client.callTool({ name: 'recipes', arguments: { action: 'create', name: rn } });
+      if (r.isError || !r.content[0].text.includes('Created')) throw new Error(r.content[0].text);
+      return r.content[0].text;
+    });
+  }
+  await new Promise(r => setTimeout(r, 2000));
+
+  await test('recipe_collections → add_recipes adds both test recipes', async () => {
+    const r = await client.callTool({ name: 'recipe_collections', arguments: {
+      action: 'add_recipes', name: testCollection, recipe_names: [collRecipeA, collRecipeB],
+    }});
+    if (r.isError || !r.content[0].text.includes('Added to')) throw new Error(r.content[0].text);
+    const line = await collectionLine();
+    if (!line.includes(collRecipeA) || !line.includes(collRecipeB)) throw new Error(`both recipes not in collection: ${line}`);
+    return line.trim();
+  });
+
+  await test('recipe_collections → remove_recipes removes one and keeps the other', async () => {
+    const r = await client.callTool({ name: 'recipe_collections', arguments: {
+      action: 'remove_recipes', name: testCollection, recipe_names: [collRecipeA],
+    }});
+    if (r.isError || !r.content[0].text.includes('Removed from')) throw new Error(r.content[0].text);
+    const line = await collectionLine();
+    if (line.includes(collRecipeA)) throw new Error(`removed recipe still in collection: ${line}`);
+    if (!line.includes(collRecipeB)) throw new Error(`OTHER recipe was removed too: ${line}`);
+    return line.trim();
+  });
+
+  for (const rn of [collRecipeA, collRecipeB]) {
+    await test(`recipes → delete ("${rn}")`, async () => {
+      const r = await client.callTool({ name: 'recipes', arguments: { action: 'delete', name: rn } });
+      if (r.isError || !r.content[0].text.toLowerCase().includes('delet')) throw new Error(r.content[0].text);
+      return r.content[0].text;
+    });
+  }
 
   await test(`recipe_collections → delete ("${testCollection}")`, async () => {
     const r = await client.callTool({ name: 'recipe_collections', arguments: { action: 'delete', name: testCollection } });

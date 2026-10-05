@@ -2,6 +2,7 @@ import { z } from "zod";
 import { textResponse, errorResponse } from "./helpers.js";
 import { createElicitationHelpers } from "./elicitation.js";
 import { normalizeRecipe } from "../recipe-normalizer.js";
+import { minutesToSeconds, formatDuration, durationTextToSeconds } from "../recipe-time.js";
 
 export function register(server, getClient) {
   const { elicitRequiredField, elicitConfirmation } = createElicitationHelpers(server);
@@ -47,8 +48,8 @@ export function register(server, getClient) {
           const list = recipes.map(r => {
             const parts = [`- **${r.name}**`];
             if (r.rating) parts.push(`⭐${r.rating}`);
-            if (r.prepTime) parts.push(`prep: ${r.prepTime}min`);
-            if (r.cookTime) parts.push(`cook: ${r.cookTime}min`);
+            if (r.prepTime) parts.push(`prep: ${formatDuration(r.prepTime)}`);
+            if (r.cookTime) parts.push(`cook: ${formatDuration(r.cookTime)}`);
             if (r.servings) parts.push(`serves: ${r.servings}`);
             parts.push(`(id: ${r.identifier})`);
             return parts.join(' | ');
@@ -63,8 +64,8 @@ export function register(server, getClient) {
           if (recipe.sourceName) text += `Source: ${recipe.sourceName}\n`;
           if (recipe.sourceUrl) text += `URL: ${recipe.sourceUrl}\n`;
           if (recipe.rating) text += `Rating: ${'⭐'.repeat(recipe.rating)}\n`;
-          if (recipe.prepTime) text += `Prep: ${recipe.prepTime} min\n`;
-          if (recipe.cookTime) text += `Cook: ${recipe.cookTime} min\n`;
+          if (recipe.prepTime) text += `Prep: ${formatDuration(recipe.prepTime)}\n`;
+          if (recipe.cookTime) text += `Cook: ${formatDuration(recipe.cookTime)}\n`;
           if (recipe.servings) text += `Servings: ${recipe.servings}\n`;
           if (recipe.createdAt) text += `Created: ${recipe.createdAt}\n`;
           if (recipe.note) text += `\nNotes: ${recipe.note}\n`;
@@ -101,8 +102,8 @@ export function register(server, getClient) {
             note: note || null,
             sourceName: source_name || null,
             sourceUrl: source_url || null,
-            prepTime: prep_time || null,
-            cookTime: cook_time || null,
+            prepTime: minutesToSeconds(prep_time),
+            cookTime: minutesToSeconds(cook_time),
             servings: servings || null,
           });
           return textResponse(`Created recipe "${result.name}"`);
@@ -124,8 +125,8 @@ export function register(server, getClient) {
           if (note !== undefined) fields.note = note;
           if (source_name !== undefined) fields.sourceName = source_name;
           if (source_url !== undefined) fields.sourceUrl = source_url;
-          if (prep_time !== undefined) fields.prepTime = prep_time;
-          if (cook_time !== undefined) fields.cookTime = cook_time;
+          if (prep_time !== undefined) fields.prepTime = minutesToSeconds(prep_time);
+          if (cook_time !== undefined) fields.cookTime = minutesToSeconds(cook_time);
           if (servings !== undefined) fields.servings = servings;
           if (Object.keys(fields).length === 0) {
             return errorResponse('Action "update" requires at least one field to change (ingredients, steps, note, source_name, source_url, prep_time, cook_time, or servings).');
@@ -179,8 +180,8 @@ export function register(server, getClient) {
               note: normalized.note,
               sourceName: normalized.sourceName,
               sourceUrl: normalized.sourceUrl,
-              prepTime: normalized.prepTime,
-              cookTime: normalized.cookTime,
+              prepTime: durationTextToSeconds(normalized.prepTime),
+              cookTime: durationTextToSeconds(normalized.cookTime),
               servings: normalized.servings,
             });
             output += `\n✅ Saved to AnyList as "${created.name}"`;

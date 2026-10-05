@@ -83,8 +83,8 @@ Manage AnyList recipes, including URL import and text parsing.
 | `note` | string | No | Recipe notes (create, update) |
 | `source_name` | string | No | Source attribution (create, update) |
 | `source_url` | string | No | Source URL (create, update) |
-| `prep_time` | number | No | Prep time in minutes (create, update) |
-| `cook_time` | number | No | Cook time in minutes (create, update) |
+| `prep_time` | number | No | Prep time in minutes (create, update). AnyList stores seconds; the server converts both ways. |
+| `cook_time` | number | No | Cook time in minutes (create, update). AnyList stores seconds; the server converts both ways. |
 | `servings` | string | No | e.g. `"4"` or `"4-6"` (create, update) |
 | `url` | string | For import/normalize | URL to fetch recipe from |
 | `text` | string | For normalize | Raw recipe text to parse |
@@ -140,12 +140,14 @@ Manage the AnyList meal planning calendar.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `action` | enum | Yes | See actions below |
-| `date` | string | For create | Date in `YYYY-MM-DD` format |
+| `date` | string | For create | Date in `YYYY-MM-DD` format (new date on update) |
 | `title` | string | No | Event title (use this or `recipe_id`) |
 | `recipe_id` | string | No | Link an existing recipe by ID |
 | `label_id` | string | No | Meal type label ID (get from `list_labels`) |
 | `details` | string | No | Additional notes |
-| `event_id` | string | For delete | Event ID to delete |
+| `event_id` | string | For update, delete | Event ID (from `list_events`) |
+
+On `update_event`, only the fields you pass change, and the event keeps its ID. Pass an empty string to clear `title`, `recipe_id`, `label_id` or `details`.
 
 **Actions:**
 
@@ -164,6 +166,9 @@ Manage the AnyList meal planning calendar.
     "label_id": "<id from list_labels>"
 } }
 
+// Move an event to another day, or change its recipe/label/notes (in place)
+{ "name": "meal_plan", "arguments": { "action": "update_event", "event_id": "<id>", "date": "2025-02-16" } }
+
 // Delete an event
 { "name": "meal_plan", "arguments": { "action": "delete_event", "event_id": "<id>" } }
 ```
@@ -176,9 +181,9 @@ Organize recipes into named collections.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `action` | enum | Yes | `list` or `create` |
-| `name` | string | For create | Collection name |
-| `recipe_names` | string[] | No | Recipes to include on creation |
+| `action` | enum | Yes | `list`, `create`, `add_recipes`, `remove_recipes`, or `delete` |
+| `name` | string | All but `list` | Collection name |
+| `recipe_names` | string[] | For add/remove | Exact recipe names (also optional on create) |
 
 **Actions:**
 
@@ -192,6 +197,14 @@ Organize recipes into named collections.
     "name": "Weeknight Dinners",
     "recipe_names": ["Simple Pasta", "Chicken Tikka Masala"]
 } }
+
+// Add recipes to / remove recipes from an existing collection
+// (removing only changes membership; the recipes are not deleted)
+{ "name": "recipe_collections", "arguments": { "action": "add_recipes", "name": "Weeknight Dinners", "recipe_names": ["Tacos"] } }
+{ "name": "recipe_collections", "arguments": { "action": "remove_recipes", "name": "Weeknight Dinners", "recipe_names": ["Simple Pasta"] } }
+
+// Delete a collection (its recipes are kept)
+{ "name": "recipe_collections", "arguments": { "action": "delete", "name": "Weeknight Dinners" } }
 ```
 
 ---

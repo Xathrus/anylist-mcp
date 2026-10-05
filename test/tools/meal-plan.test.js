@@ -104,6 +104,42 @@ describe('meal_plan tool', () => {
     });
   });
 
+  describe('update_event', () => {
+    beforeEach(() => {
+      client._events.push({ identifier: 'e-thu', date: '2026-10-08', recipeId: 'r-1', labelId: 'l-dinner', title: null, details: 'note' });
+    });
+
+    it('moves an event to another date and keeps its id and other fields', async () => {
+      const result = await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu', date: '2026-10-09' });
+      assert.ok(result.content[0].text.includes('e-thu'));
+      const e = client._events[0];
+      assert.equal(e.date, '2026-10-09');
+      assert.equal(e.recipeId, 'r-1');
+      assert.equal(e.labelId, 'l-dinner');
+      assert.equal(e.details, 'note');
+      assert.equal(client._events.length, 1, 'no new event created');
+    });
+
+    it('changes only the fields passed and clears with an empty string', async () => {
+      await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu', label_id: 'l-lunch', details: '' });
+      const e = client._events[0];
+      assert.equal(e.labelId, 'l-lunch');
+      assert.equal(e.details, null);
+      assert.equal(e.date, '2026-10-08');
+    });
+
+    it('requires at least one change', async () => {
+      const result = await handlers.meal_plan({ action: 'update_event', event_id: 'e-thu' });
+      assert.equal(result.isError, true);
+    });
+
+    it('errors for an unknown event', async () => {
+      const result = await handlers.meal_plan({ action: 'update_event', event_id: 'bad', date: '2026-10-09' });
+      assert.equal(result.isError, true);
+      assert.ok(result.content[0].text.includes('not found'));
+    });
+  });
+
   describe('delete_event', () => {
     it('deletes an existing event', async () => {
       client._events.push({ identifier: 'e1', date: '2025-03-01' });

@@ -174,6 +174,15 @@ export class MockAnyListClient {
     return { identifier: 'e-1', date: opts.date };
   }
 
+  async updateMealPlanEvent(id, changes = {}) {
+    const e = this._events.find(x => x.identifier === id);
+    if (!e) throw new Error(`Meal plan event "${id}" not found`);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value !== undefined) e[key] = value === '' ? null : value;
+    }
+    return { identifier: e.identifier, date: e.date };
+  }
+
   async deleteMealPlanEvent(id) {
     const idx = this._events.findIndex(e => e.identifier === id);
     if (idx === -1) throw new Error(`Meal plan event "${id}" not found`);
@@ -186,6 +195,36 @@ export class MockAnyListClient {
     const c = { identifier: 'c-1', name, recipeCount: recipeNames.length, recipeNames };
     this._collections.push(c);
     return c;
+  }
+
+  _findCollectionAndRecipes(name, recipeNames) {
+    const c = this._collections.find(x => x.name.toLowerCase() === name.toLowerCase());
+    if (!c) throw new Error(`Recipe collection "${name}" not found`);
+    const found = [];
+    const notFound = [];
+    for (const n of recipeNames) {
+      const r = this._recipes.find(x => x.name.toLowerCase() === n.toLowerCase());
+      if (r) found.push(r.name); else notFound.push(n);
+    }
+    return { c, found, notFound };
+  }
+
+  async addRecipesToCollection(name, recipeNames = []) {
+    const { c, found, notFound } = this._findCollectionAndRecipes(name, recipeNames);
+    const added = found.filter(n => !c.recipeNames.includes(n));
+    const alreadyPresent = found.filter(n => c.recipeNames.includes(n));
+    c.recipeNames.push(...added);
+    c.recipeCount = c.recipeNames.length;
+    return { name: c.name, added, alreadyPresent, notFound };
+  }
+
+  async removeRecipesFromCollection(name, recipeNames = []) {
+    const { c, found, notFound } = this._findCollectionAndRecipes(name, recipeNames);
+    const removed = found.filter(n => c.recipeNames.includes(n));
+    const notInCollection = found.filter(n => !c.recipeNames.includes(n));
+    c.recipeNames = c.recipeNames.filter(n => !removed.includes(n));
+    c.recipeCount = c.recipeNames.length;
+    return { name: c.name, removed, notInCollection, notFound };
   }
 
   async deleteRecipeCollection(name) {

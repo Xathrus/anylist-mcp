@@ -78,6 +78,35 @@ describe('recipes tool', () => {
       });
       assert.equal(client._recipes[0].name, 'Full Recipe');
     });
+
+    it('stores prep/cook minutes as AnyList seconds', async () => {
+      await handlers.recipes({ action: 'create', name: 'Cobbler', prep_time: 20, cook_time: 50 });
+      assert.equal(client._recipes[0].prepTime, 1200);
+      assert.equal(client._recipes[0].cookTime, 3000);
+    });
+  });
+
+  describe('recipe times', () => {
+    it('list shows AnyList seconds as minutes', async () => {
+      client._recipes.push({ identifier: 'r-t', name: 'Baked Lemon Chicken', cookTime: 1500, prepTime: 600 });
+      const text = (await handlers.recipes({ action: 'list' })).content[0].text;
+      assert.ok(text.includes('cook: 25 min'), text);
+      assert.ok(text.includes('prep: 10 min'), text);
+      assert.ok(!text.includes('1500'), text);
+    });
+
+    it('get shows AnyList seconds as minutes', async () => {
+      client._recipes.push({ identifier: 'r-t', name: 'Cookies', prepTime: 1200, cookTime: 600 });
+      const text = (await handlers.recipes({ action: 'get', name: 'Cookies' })).content[0].text;
+      assert.ok(text.includes('Prep: 20 min'), text);
+      assert.ok(text.includes('Cook: 10 min'), text);
+    });
+
+    it('update converts minutes to seconds', async () => {
+      client._recipes.push({ identifier: 'r-u', name: 'Soup', prepTime: 60 });
+      await handlers.recipes({ action: 'update', name: 'Soup', prep_time: 15 });
+      assert.equal(client._recipes[0].prepTime, 900);
+    });
   });
 
   describe('import_url', () => {
